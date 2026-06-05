@@ -2,6 +2,6 @@
     "app": "12.7",
     "xcode": "16.2",
     "deploy_xcode": "16.2",
-    "bazel": "8.4.2:4d90bec2db6e86c913cb4bf32412b5ccce6e8d2abc1b6d10db59a65e3cf44a66",
+    "bazel": "8.4.2",
     "macos": "15"
 }
