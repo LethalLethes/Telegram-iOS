@@ -1,4 +1,4 @@
-name: CI
+Name: CI
 
 on:
   workflow_dispatch:
@@ -14,6 +14,12 @@ jobs:
           submodules: 'recursive'
           fetch-depth: '0'
 
+      # YENİ ADDIM: Bazel-i birbaşa sistemə quraşdırın
+      - name: Install Bazel
+        run: |
+          brew install bazelisk
+          # Bazelisk, .bazelversion faylına əsasən düzgün versiyanı yükləyəcək
+
       - name: Set active Xcode path
         run: |
           XCODE_VERSION=$(cat versions.json | python3 -c 'import json,sys;obj=json.load(sys.stdin);print(obj["xcode"]);')
@@ -23,6 +29,7 @@ jobs:
         run: |
           set -x
           sudo mkdir -p /Users/Shared
+          sudo chown -R $USER /Users/Shared
           cp -R $GITHUB_WORKSPACE /Users/Shared/
           mv /Users/Shared/$(basename $GITHUB_WORKSPACE) /Users/Shared/telegram-ios
 
@@ -30,6 +37,8 @@ jobs:
         run: |
           set -x
           SOURCE_DIR=/Users/Shared/telegram-ios
+          # Faylların yazılması üçün icazə verin
+          sudo chmod -R 777 /Users/Shared/telegram-ios
           BAZEL_USER_ROOT="/private/var/tmp/_bazel_containerhost"
           cd $SOURCE_DIR
 
@@ -43,10 +52,9 @@ jobs:
 
           python3 build-system/Make/ImportCertificates.py --path build-system/fake-codesigning/certs
 
+          # Make.py-a sistemdəki bazel-i istifadə etməyi göstərin
           python3 -u build-system/Make/Make.py \
             --bazelUserRoot="$BAZEL_USER_ROOT" \
-            --overrideBazelVersion \
-            --overrideXcodeVersion \
             build \
             --configurationPath="build-system/appstore-configuration.json" \
             --codesigningInformationPath=build-system/fake-codesigning \
@@ -56,9 +64,8 @@ jobs:
           OUTPUT_PATH="build/artifacts"
           rm -rf "$OUTPUT_PATH"
           mkdir -p "$OUTPUT_PATH"
-          for f in bazel-out/applebin_ios-ios_arm*-opt-ST-*/bin/Telegram/Telegram.ipa; do
-            cp "$f" $OUTPUT_PATH/
-          done
+          # Yolun doğruluğunu yoxlayın, əgər tapmasa find əmrindən istifadə edin
+          cp $(find . -name Telegram.ipa | head -n 1) $OUTPUT_PATH/
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
