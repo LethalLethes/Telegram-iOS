@@ -7,69 +7,34 @@ jobs:
   build:
     runs-on: macos-15
     timeout-minutes: 360
-
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: 'recursive'
-          fetch-depth: '0'
-
-      # YENİ ADDIM: Bazel-i birbaşa sistemə quraşdırın
+          submodules: recursive
+          fetch-depth: 0
       - name: Install Bazel
-        run: |
-          brew install bazelisk
-          # Bazelisk, .bazelversion faylına əsasən düzgün versiyanı yükləyəcək
-
-      - name: Set active Xcode path
+        run: brew install bazelisk
+      - name: Set Xcode
         run: |
           XCODE_VERSION=$(cat versions.json | python3 -c 'import json,sys;obj=json.load(sys.stdin);print(obj["xcode"]);')
           sudo xcode-select -s /Applications/Xcode_$XCODE_VERSION.app/Contents/Developer
-
-      - name: Create canonical source directory
+      - name: Setup Dir
         run: |
-          set -x
           sudo mkdir -p /Users/Shared
           sudo chown -R $USER /Users/Shared
-          cp -R $GITHUB_WORKSPACE /Users/Shared/
-          mv /Users/Shared/$(basename $GITHUB_WORKSPACE) /Users/Shared/telegram-ios
-
-      - name: Build the App
+          cp -R $GITHUB_WORKSPACE /Users/Shared/telegram-ios
+      - name: Build
         run: |
-          set -x
           SOURCE_DIR=/Users/Shared/telegram-ios
-          # Faylların yazılması üçün icazə verin
-          sudo chmod -R 777 /Users/Shared/telegram-ios
-          BAZEL_USER_ROOT="/private/var/tmp/_bazel_containerhost"
+          sudo chmod -R 777 $SOURCE_DIR
           cd $SOURCE_DIR
-
-          BUILD_NUMBER_OFFSET="$(cat build_number_offset)"
-          export APP_VERSION=$(cat versions.json | python3 -c 'import json,sys;obj=json.load(sys.stdin);print(obj["app"]);')
-          export COMMIT_COUNT=$(git rev-list --count HEAD)
-          export COMMIT_COUNT="$(($COMMIT_COUNT+$BUILD_NUMBER_OFFSET))"
-          export BUILD_NUMBER="$COMMIT_COUNT"
-          echo "BUILD_NUMBER=$(echo $BUILD_NUMBER)" >> $GITHUB_ENV
-          echo "APP_VERSION=$(echo $APP_VERSION)" >> $GITHUB_ENV
-
+          export BUILD_NUMBER=$(($(git rev-list --count HEAD) + $(cat build_number_offset)))
           python3 build-system/Make/ImportCertificates.py --path build-system/fake-codesigning/certs
-
-          # Make.py-a sistemdəki bazel-i istifadə etməyi göstərin
-          python3 -u build-system/Make/Make.py \
-            --bazelUserRoot="$BAZEL_USER_ROOT" \
-            build \
-            --configurationPath="build-system/appstore-configuration.json" \
-            --codesigningInformationPath=build-system/fake-codesigning \
-            --configuration=release_arm64 \
-            --buildNumber="$BUILD_NUMBER"
-
-          OUTPUT_PATH="build/artifacts"
-          rm -rf "$OUTPUT_PATH"
-          mkdir -p "$OUTPUT_PATH"
-          # Yolun doğruluğunu yoxlayın, əgər tapmasa find əmrindən istifadə edin
-          cp $(find . -name Telegram.ipa | head -n 1) $OUTPUT_PATH/
-
-      - name: Upload IPA
+          python3 -u build-system/Make/Make.py --bazelUserRoot="/private/var/tmp/_bazel_containerhost" build --configurationPath="build-system/appstore-configuration.json" --codesigningInformationPath=build-system/fake-codesigning --configuration=release_arm64 --buildNumber="$BUILD_NUMBER"
+          mkdir -p build/artifacts
+          cp $(find . -name Telegram.ipa | head -n 1) build/artifacts/
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
           name: Telegram-IPA
           path: /Users/Shared/telegram-ios/build/artifacts/Telegram.ipa
-          retention-days: 7
